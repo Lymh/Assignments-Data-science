@@ -1,0 +1,184 @@
+---
+title: "Tarea 05"
+author: "Lymh Joshua Morales Chin"
+date: "2/26/2021"
+knit: (function(inputFile, encoding){
+      out_dir <-'./';
+      rmarkdown::render(inputFile,
+                        encoding=encoding,
+                        output_file=file.path(dirname(inputFile), out_dir, './pyTarea05.html')) })
+
+output: html_document
+---
+
+
+## Procedimiento parte 1:
+
+Para leer el archivo 'time_series_covid19_confirmed_global.csv' se implementaron las funciones get_file y get_dataFrame, una se encarga de leer el archivo csv y la otra de convertirlo en un dataFrame. La clase procesa_archivos recibe el direccion del file y una lista los paises que se deben leer.
+
+
+```{python}
+import pandas as pd
+import numpy as np
+
+class procesa_archivos(): ##Creamos la clase procesa archivos
+
+    def __init__(self,file,list):  #Constructor file y la lista de paises
+        self.file=file
+        self.list=list
+
+    def get_file(self):   #Con esta funcion leemos el file
+        return pd.read_csv(self.file)
+
+    def get_dataFrame(self):   #Convertimos el file en un dataFrame
+        return pd.DataFrame(self.get_file())
+ 
+    def delete_columns(self):   #Con esta funcion borramos las columnas 'Province/State','Lat','Long'
+        covidConfirmados=self.get_dataFrame()
+        return covidConfirmados.drop(['Province/State','Lat','Long'],axis=1)
+    
+    def collect_countries(self):   #Sustraemos la lista de paises
+        covidConfirmados=self.get_dataFrame()
+        countries=covidConfirmados.loc[:,'Country/Region']
+        return countries
+
+    def set_countryRegion_as_index(self):   #Pasamos los paises como un index 
+        covidConfirmados=self.delete_columns()
+        new_covidConfirmados=covidConfirmados.set_index('Country/Region')
+        return new_covidConfirmados
+
+    def set_countries(self):      #Seleccionamos los paises que contiene la lista 'list'
+        covidConfirmados=self.set_countryRegion_as_index()
+        new_covidConfirmados=covidConfirmados.loc[self.list]
+        return new_covidConfirmados
+
+    def countries_selected(self):   #Unimos las francias ya que esta se compone de varias subAreas
+        covidConfirmados=self.set_countries()
+        covidConfirmados=covidConfirmados.groupby(covidConfirmados.index).agg(lambda m:sum(m))
+        return covidConfirmados
+    
+
+```
+
+Para imprimir el dataFrame se debe primero instanciar la clase y luego llamar a sus funciones como se muestra a continuacion:
+
+```{python}
+countries=['Costa Rica', 'Guatemala', 'Ecuador', 'Brazil' , 'Germany']
+covidConfirmados=procesa_archivos('./time_series_covid19_confirmed_global.csv',countries)
+print(covidConfirmados.get_dataFrame())
+```
+
+El dataFrame anterior posee 386 columnas y 273 filas. Se van van a eliminar las columnas  “Lat”,“Long” y "Province/State", utilizando la funcion drop de pandas que se encarga de eliminar columnas usando la etiqueta de cada columna o fila.
+
+```{python}
+print(covidConfirmados.delete_columns())
+```
+Se crea una funcion llamada collect_countries para guardar como parametro la lista de paises.
+
+```{python}
+print(covidConfirmados.collect_countries())
+```
+
+
+Al crear la clase procesa_archivos esta recibe una lista de paises “Costa Rica”, “Guatemala”, “Ecuador”, “Brasil” y “Germany” a seleccionar, para esto se creo una funcion llamada set_countryRegion_as_index() para colocar la lista de paises como index y set_countries() para seleccionar los paises anteriores, por tanto, el dataFrame se va a ver de la siguiente manera.
+
+```{python}
+print(covidConfirmados.set_countries())
+
+```
+## Parte 2:
+
+Se crea una clase que toma el dataFrame anterior
+```{python}
+from parte1 import procesa_archivos
+from numpy import mean, std
+import numpy as np
+import pandas as pd
+import datetime
+import matplotlib.pyplot as plt
+import seaborn as sns
+class  analysis(procesa_archivos):
+    
+    def dataFrame(self):
+       covid=self.countries_selected()  #Agarammos el dataFrame anterior
+       return covid
+
+    def arrange_data(self):  #Se arregla el dataFrame para que con las columnas como months_x y years_x
+        cases_covid=self.countries_selected()
+        cases_covid=cases_covid.T
+
+        cases_covid = cases_covid.diff()   #Calcula la diferencia entre dias de cada mes
+        cases_covid = cases_covid.drop(index='1/22/20')  #Se quita la columna de ceros 
+        months = pd.DatetimeIndex(cases_covid.index).month  #se pasa el index a formato dataTime de cada month
+
+        dates = cases_covid.assign(month_x = months)  
+        years = pd.DatetimeIndex(cases_covid.index).year
+        dates = dates.assign(year_x = years)
+
+        return dates
+
+    def statistic_measures(self):
+        cases_covid=self.arrange_data()   #Se jala dates 
+
+        cases_covid_total = cases_covid.groupby(['month_x', 'year_x']).sum()  #Se suman todos los casos
+        cases_covid_promedio = cases_covid.groupby(['month_x', 'year_x']).mean() #Se saca la promedio de los casos por mes
+        cases_covid_media = cases_covid.groupby(['month_x', 'year_x']).median()  #Se saca la mediana de los casos por mes
+        cases_covid_desviacion = cases_covid.groupby(['month_x', 'year_x']).std() #Se saca la desviacion estandar
+
+        cases_covid_quartile1= cases_covid.groupby(['month_x', 'year_x']).quantile([0.25])  #Se calculan los cuartile
+        cases_covid_quartile2= cases_covid.groupby(['month_x', 'year_x']).quantile([0.50])
+        cases_covid_quartile3= cases_covid.groupby(['month_x', 'year_x']).quantile([0.75])
+
+        return cases_covid_total, cases_covid_promedio, cases_covid_media, cases_covid_desviacion, cases_covid_quartile1,cases_covid_quartile2,cases_covid_quartile3
+
+    def box_DataFrame(self):
+        sum, prom, medi, standar, q1, q2, q3=self.statistic_measures()  
+        sum.boxplot(column=['Costa Rica', 'Guatemala','France', 'Ecuador', 'Brazil' , 'Germany']) #Se imprime el boxplot de los casos por mes
+        plt.show()  #se muestra la grafica
+
+    def cor_DataFrame(self):
+        sum, prom, medi, standar, q1, q2, q3=self.statistic_measures()
+        sns.heatmap(sum.corr(), annot=True)  #Se muestra la correlacion entre paises normalizadas
+        plt.show() # se muestra la grafica
+```
+Parte del procedimiento consiste enordenar el dataFrame para poder agrupar por mes y por ano. Para esto se creo la funcion arrange_data. Se encarga de transponer el dataFrame y pasar el index que esta compuesto de fechas a formato dataTime, se agrupa por month y por year.
+```{python}
+countries=['Costa Rica', 'Guatemala', 'France','Ecuador', 'Brazil' , 'Germany']
+confirm=analysis('./time_series_covid19_confirmed_global.csv',countries)
+print(confirm.arrange_data())
+```
+Posteriormente, se agrupa por month y por year para obtener el total de casos por mes. Se usa la funcion sum() para 
+```{python}
+sum, prom, medi, standar, q1, q2, q3=confirm.statistic_measures()
+print(sum)
+```
+Luego se realizo lo mismo para calcular pero con sus respectivas funciones para calcular el promedio, la mediana, la desviacion estandar y los quartile.
+
+```{python}
+print("Promedio")
+print(prom)
+print("Mediana")
+print(medi)
+print("Desviacion estandar")
+print(standar)
+print("Primer quartile")
+print(q1)
+print("Segundo quartile")
+print(q2)
+print("Tercer quartile")
+print(q3)
+```
+
+Se grafico el numero de casos por mes de cada pais usando boxplots. El procedimiento se observa en la funcion box_DataFrame.
+
+```{python}
+confirm.box_DataFrame()
+```
+
+Y por ultimo, la correlacion entre paises se obtuve con la funcion corr() y la libreria sns.
+
+```{python}
+confirm.cor_DataFrame()
+```
+
+
